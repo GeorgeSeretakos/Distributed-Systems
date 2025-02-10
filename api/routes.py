@@ -54,7 +54,7 @@ def get_overlay():
             "predecessor": {"ip": predecessor_data[0], "port": predecessor_data[1]}
         }
 
-        nodes.routesend(node_info)
+        nodes.append(node_info)
 
         # Move to the next node in the ring
         next_ip, next_port = successor_data
@@ -65,6 +65,52 @@ def get_overlay():
         current_id = chord_node.hash_id(f"{current_ip}:{current_port}")  # Compute node ID
 
     return jsonify({"overlay": nodes}), 200
+
+
+
+@routes.route('/join', methods=['POST'])
+def join():
+    """Handles new nodes joining the Chord ring."""
+    data = request.json
+    new_node_ip = data["ip"]
+    new_node_port = data["port"]
+    new_node_id = data["node_id"]
+
+    # Ensure successor exists
+    successor_ip, successor_port = chord_node.successor
+
+#     # Find the correct successor for the new node
+#     if chord_node.node_id < new_node_id < chord_node.hash_id(f"{successor_ip}:{successor_port}"):
+#         correct_successor = (successor_ip, successor_port)
+#     else:
+#         # Forward the request to find the correct successor in the ring
+#         response = requests.get(f"http://{successor_ip}:{successor_port}/get_successor",
+#                                 params={"node_id": new_node_id})
+#         correct_successor = response.json().get("successor", (None, None))
+#
+#     # Find the correct predecessor (previous node in the ring)
+#     correct_predecessor = (chord_node.ip, chord_node.port)  # Assume current node is predecessor
+
+    # Inform the new node about its correct successor and predecessor
+    response_data = {
+        "successor_ip": successor_ip,
+        "successor_port": successor_port,
+        "predecessor_ip": chord_node.ip,
+        "predecessor_port": chord_node.port
+    }
+
+    # Update the new node’s predecessor
+    chord_node.successor = (new_node_ip, new_node_port)
+
+#     # Notify the correct successor to update its predecessor
+#     requests.post(f"http://{correct_successor[0]}:{correct_successor[1]}/update_predecessor",
+#                   json={"new_predecessor_ip": new_node_ip, "new_predecessor_port": new_node_port})
+#
+#     print(f"🔄 Node {new_node_ip}:{new_node_port} (ID {new_node_id}) joined! "
+#           f"New Successor: {correct_successor}, New Predecessor: {correct_predecessor}")
+
+    return jsonify(response_data), 200
+
 
 
 # Function to set the chord_node instance dynamically

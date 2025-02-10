@@ -26,10 +26,9 @@ if __name__ == "__main__":
     chord_node = ChordNode(args.ip, args.port, bootstrap_ip, bootstrap_port)
     dht = DHT(chord_node)
 
+    # Pass the chord_node instance to routes.py
+    set_chord_node(chord_node)
+    set_dht(dht)
+
     app.run(host=args.ip, port=args.port, threaded=True)
 
-# Pass the chord_node instance to routes.py
-set_chord_node(chord_node)
-set_dht(dht)
-
-app.run(host=args.ip, port=args.port, threaded=True)

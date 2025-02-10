@@ -23,9 +23,12 @@ class ChordNode:
             self.predecessor = None
             print(f"Joining Chord via Bootstrap Node {bootstrap_ip}:{bootstrap_port}")
             self.join_ring(bootstrap_ip, bootstrap_port)
-    
+
+
     def hash_id(self, key):
-        return int(hashlib.sha1(key.encode()).hexdigest(), 16) % (2**160)
+        return int(hashlib.sha1(key.encode()).hexdigest(), 16) % (2**32)  # 32-bit hash
+
+
 
     def join_ring(self, bootstrap_ip, bootstrap_port):
         """Join an existing Chord ring via the bootstrap node."""
@@ -34,25 +37,20 @@ class ChordNode:
 
         if response.status_code == 200:
             data = response.json()
-            print("🔍 Received response from bootstrap:", data)  # Debugging print
+            print("🔍 Received response from bootstrap:", data)
+
+            # Set the correct successor and predecessor
             self.successor = (data["successor_ip"], data["successor_port"])
-            # Ensure required keys exist in response before assigning
-            if "predecessor_ip" in data and "predecessor_port" in data:
-                self.predecessor = (data["predecessor_ip"], data["predecessor_port"])
-            else:
-                print(" Warning: 'predecessor_ip' missing in response, setting to None.")
-                self.predecessor = None  # Handle case where predecessor info is missing
+            self.predecessor = (data["predecessor_ip"], data["predecessor_port"])
 
-            
-            print(f" Joined ring: Successor -> {self.successor}, Predecessor -> {self.predecessor}")
+            print(f"🔗 Joined ring: Successor -> {self.successor}, Predecessor -> {self.predecessor}")
 
-            # Notify successor to update predecessor
+            # Notify the successor about the new predecessor
             requests.post(f"http://{self.successor[0]}:{self.successor[1]}/update_predecessor",
-                        json={"new_predecessor_ip": self.ip, "new_predecessor_port": self.port})
+                          json={"new_predecessor_ip": self.ip, "new_predecessor_port": self.port})
+
         else:
-            print(f" Failed to join ring: {response.status_code}, {response.text}")
-
-
+            print(f"⚠️ Failed to join ring: {response.status_code}, {response.text}")
 
 
     def find_successor(self, key):
@@ -115,40 +113,6 @@ class ChordNode:
             print(f"Failed to send request to {ip}:{port} -> {e}")
             return None
 
-@app.route('/join', methods=['POST'])
-def join():
-    """Handles new nodes joining the Chord ring."""
-    data = request.json
-    new_node_ip = data["ip"]
-    new_node_port = data["port"]
-    new_node_id = data["node_id"]
-
-    # Ensure successor exists
-    successor_ip, successor_port = chord_node.successor
-
-    # Ensure predecessor exists; if None, set it to self
-    if chord_node.predecessor:
-        predecessor_ip, predecessor_port = chord_node.predecessor
-    else:
-        predecessor_ip, predecessor_port = chord_node.ip, chord_node.port  # Default to itself
-
-    # Construct response with both successor and predecessor information
-    response_data = {
-        "successor_ip": successor_ip,
-        "successor_port": successor_port,
-        "predecessor_ip": predecessor_ip,
-        "predecessor_port": predecessor_port
-    }
-
-    # Update the bootstrap node's successor to be the new node
-    chord_node.successor = (new_node_ip, new_node_port)
-
-    # New node should also update its predecessor to the bootstrap node
-    chord_node.predecessor = (new_node_ip, new_node_port)
-
-    print(f"🔄 Node {new_node_ip}:{new_node_port} (ID {new_node_id}) joined! New successor: {chord_node.successor}, New predecessor: {chord_node.predecessor}")
-
-    return jsonify(response_data), 200
 
 if __name__ == "__main__":
     import argparse
