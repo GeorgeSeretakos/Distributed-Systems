@@ -26,7 +26,7 @@ class ChordNode:
 
 
     def hash_id(self, key):
-        return int(hashlib.sha1(key.encode()).hexdigest(), 16) % (2**32)  # 32-bit hash
+        return int(hashlib.sha1(key.encode()).hexdigest(), 16) % (2**16)  # 32-bit hash
 
 
 
@@ -39,18 +39,23 @@ class ChordNode:
             data = response.json()
             print("🔍 Received response from bootstrap:", data)
 
-            # Set the correct successor and predecessor
+            # Set correct successor and predecessor
             self.successor = (data["successor_ip"], data["successor_port"])
             self.predecessor = (data["predecessor_ip"], data["predecessor_port"])
 
             print(f"🔗 Joined ring: Successor -> {self.successor}, Predecessor -> {self.predecessor}")
 
-            # Notify the successor about the new predecessor
+            # Notify successor to update its predecessor
             requests.post(f"http://{self.successor[0]}:{self.successor[1]}/update_predecessor",
                           json={"new_predecessor_ip": self.ip, "new_predecessor_port": self.port})
 
+            # Notify predecessor to update its successor
+            requests.post(f"http://{self.predecessor[0]}:{self.predecessor[1]}/update_successor",
+                          json={"new_successor_ip": self.ip, "new_successor_port": self.port})
+
         else:
             print(f"⚠️ Failed to join ring: {response.status_code}, {response.text}")
+
 
 
     def find_successor(self, key):
