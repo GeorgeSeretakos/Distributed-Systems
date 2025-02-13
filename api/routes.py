@@ -85,7 +85,7 @@ def join():
     new_node_port = data["port"]
     new_node_id = data["node_id"]
 
-    # If only the bootstrap node exists, assign the new node as successor & predecessor
+    # If only the bootstrap node exists, make the new node its direct neighbor
     if chord_node.successor == (chord_node.ip, chord_node.port):
         chord_node.successor = (new_node_ip, new_node_port)
         chord_node.predecessor = (new_node_ip, new_node_port)
@@ -97,14 +97,14 @@ def join():
             "predecessor_port": chord_node.port
         }
     else:
-        # Find the correct position in the ring
+        # ✅ Find the correct position for the new node
         successor_ip, successor_port = find_correct_successor(new_node_id)
 
-        # Get the predecessor of the chosen successor
+        # ✅ Get the predecessor of the correct successor
         pred_response = requests.get(f"http://{successor_ip}:{successor_port}/predecessor")
         predecessor_ip, predecessor_port = pred_response.json().get("predecessor", (None, None))
 
-        # Send back the correct successor and predecessor for the new node
+        # ✅ Update new node's successor and predecessor
         response_data = {
             "successor_ip": successor_ip,
             "successor_port": successor_port,
@@ -112,11 +112,11 @@ def join():
             "predecessor_port": predecessor_port
         }
 
-        # Notify predecessor to update successor
+        # ✅ Notify predecessor to update its successor
         requests.post(f"http://{predecessor_ip}:{predecessor_port}/update_successor",
                       json={"new_successor_ip": new_node_ip, "new_successor_port": new_node_port})
 
-        # Notify successor to update predecessor
+        # ✅ Notify successor to update its predecessor
         requests.post(f"http://{successor_ip}:{successor_port}/update_predecessor",
                       json={"new_predecessor_ip": new_node_ip, "new_predecessor_port": new_node_port})
 
@@ -125,34 +125,51 @@ def join():
     return jsonify(response_data), 200
 
 
+
 def find_correct_successor(node_id):
-    """Find the correct successor in the ring for a new node."""
+    """Finds the correct successor for a new node in the Chord ring."""
     current_ip, current_port = chord_node.ip, chord_node.port
     successor_ip, successor_port = chord_node.successor
 
+    print("Current IP and Port: ", current_ip, current_port)
+    print ("Successor IP and Port: ", successor_ip, successor_port)
+
     while True:
-        # Get the ID of the current successor
+        # Get the ID of the current node and its successor
+        current_id = chord_node.hash_id(f"{current_ip}:{current_port}")
         successor_id = chord_node.hash_id(f"{successor_ip}:{successor_port}")
 
-        # ✅ Ensure the node ID is placed **before** its successor in order
-        if chord_node.node_id < node_id <= successor_id:
-            return successor_ip, successor_port  # Found the correct position
+        print("Current ID: ", current_id)
+        print("Successor ID: ", successor_id)
+        print("My ID: ", node_id)
+
+        # Case 1: Correct place found (node_id should go between current_id and successor_id)
+        if (current_id < node_id <= successor_id) or (current_id > successor_id and (node_id > current_id or node_id < successor_id)):
+            print("I found the successor: ", successor_ip, successor_port)
+            return successor_ip, successor_port  # Found the correct successor
 
         # Move to the next node in the ring
         response = requests.get(f"http://{successor_ip}:{successor_port}/successor")
         next_successor = response.json().get("successor", (None, None))
+        print(f"The successor of ${successor_ip} ${successor_port} is: ", next_successor)
 
         if next_successor == (None, None):
-            break  # If there's an issue, stop searching
+            break  # Stop if there's an issue retrieving successor info
 
+        # Move to the next node
         current_ip, current_port = successor_ip, successor_port
         successor_ip, successor_port = next_successor
 
-        # If we return to the bootstrap node, stop
+        print("Current IP and Port: ", current_ip, current_port)
+        print ("Successor IP and Port: ", successor_ip, successor_port)
+
+        # If we loop back to the bootstrap node, stop
         if (successor_ip, successor_port) == (chord_node.ip, chord_node.port):
             break
 
-    return chord_node.successor  # Default to bootstrap node's successor
+    print("Got out of the loop and returned: ", chord_node.successor)
+    return chord_node.ip, chord_node.port  # Default to bootstrap node’s successor if loop fails
+
 
 
 
